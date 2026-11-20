@@ -1,8 +1,9 @@
 'use strict';
 
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { test, before, after } = require('node:test');
+const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 // Keep tests fast and throw-away: their own data folder, cheap password hashing.
@@ -13,6 +14,7 @@ process.env.SIGNIN_MAX_FAILURES = '5';
 process.env.SIGNIN_WINDOW_MINUTES = '15';
 
 const { createApp } = require('../server/app');
+const { config } = require('../server/lib/env');
 const { seed, PASSWORD } = require('../server/seed');
 const dates = require('../server/lib/dates');
 
@@ -31,6 +33,26 @@ let base;
 let db;
 
 /* ------------------------------------------------------------------ client */
+
+// The response has to hand back every Set-Cookie value, otherwise the client
+// below never stores the session cookie and every later request looks signed
+// out. `Headers.getSetCookie()` only exists on newer runtimes (and on Node 18
+// it is missing entirely), so fall back to the combined `set-cookie` header and
+// split it on the commas that start a new cookie name - never on the commas
+// inside an `Expires=Wed, 21 Oct 2026 ...` date.
+function readSetCookies(headers) {
+  if (typeof headers.getSetCookie === 'function') {
+    const list = headers.getSetCookie();
+    if (Array.isArray(list) && list.length > 0) return list;
+  }
+  const raw = headers.get('set-cookie');
+  if (!raw) return [];
+  return raw
+    .split(/,(?=\s*[^;=,\s]+=)/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 function makeClient() {
   const cookieJar = new Map();
   let csrf = null;
@@ -47,8 +69,7 @@ function makeClient() {
     if (form) opts.body = form;
 
     const res = await fetch(`${base}${url}`, opts);
-    const setCookie = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
-    for (const raw of setCookie) {
+    for (const raw of readSetCookies(res.headers)) {
       const [pair] = raw.split(';');
       const idx = pair.indexOf('=');
       const name = pair.slice(0, idx).trim();
@@ -113,33 +134,69 @@ async function applyLeave(client, { type, start, end, reason, halfDay }) {
 }
 
 /* -------------------------------------------------------------------- setup */
-before(async () => {
-  const ctx = createApp({ dbPath: path.join(process.env.DATA_DIR, 'test.db') });
-  db = ctx.db;
-  seed(db);
-  server = ctx.app.listen(0, '127.0.0.1');
-  await new Promise((resolve) => server.once('listening', resolve));
-  base = `http://127.0.0.1:${server.address().port}`;
-});
 
-after(async () => {
-  await new Promise((resolve) => server.close(resolve));
-  try { db.close(); } catch { /* ignore */ }
-});
+// Isolation: every test gets its own throw-away database, its own upload folder
+// and its own server, seeded from scratch just before it starts and deleted
+// afterwards. Nothing a test does can leak into the next one, so failures point
+// at the behaviour under test and two runs of the suite give the same numbers.
+let startCount = 0;
+
+async function startFreshApp() {
+  startCount += 1;
+  const dir = path.join(os.tmpdir(), `lms-test-${process.pid}-${startCount}-${Date.now()}`);
+  const uploadDir = path.join(dir, 'uploads');
+  fs.mkdirSync(uploadDir, { recursive: true });
+  config.uploadDir = uploadDir;
+
+  const ctx = createApp({ dbPath: path.join(dir, 'test.db') });
+  seed(ctx.db);
+
+  const instance = ctx.app.listen(0, '127.0.0.1');
+  await new Promise((resolve, reject) => {
+    instance.once('listening', resolve);
+    instance.once('error', reject);
+  });
+
+  return {
+    db: ctx.db,
+    base: `http://127.0.0.1:${instance.address().port}`,
+    async stop() {
+      await new Promise((resolve) => instance.close(resolve));
+      try { ctx.db.close(); } catch { /* already closed */ }
+      fs.rmSync(dir, { recursive: true, force: true });
+    },
+  };
+}
+
+/** Run one test against its own fresh database and server. */
+function isolatedTest(name, body) {
+  test(name, async () => {
+    const fresh = await startFreshApp();
+    db = fresh.db;
+    base = fresh.base;
+    try {
+      await body();
+    } finally {
+      db = null;
+      base = null;
+      await fresh.stop();
+    }
+  });
+}
 
 /* ============================================================ date counting */
-test('weekends are not counted as leave days', () => {
+isolatedTest('weekends are not counted as leave days', () => {
   assert.equal(dates.countWorkingDays('2026-11-16', '2026-11-20'), 5); // Mon-Fri
   assert.equal(dates.countWorkingDays('2026-11-20', '2026-11-23'), 2); // Fri + Mon
   assert.equal(dates.countWorkingDays('2026-11-21', '2026-11-22'), 0); // Sat + Sun
 });
 
-test('a half day counts as half a day', () => {
+isolatedTest('a half day counts as half a day', () => {
   assert.equal(dates.countLeaveDays('2026-11-18', '2026-11-18', 'am'), 0.5);
   assert.equal(dates.countLeaveDays('2026-11-18', '2026-11-18', 'none'), 1);
 });
 
-test('date ranges are validated', () => {
+isolatedTest('date ranges are validated', () => {
   assert.equal(dates.isValidDate('2026-02-30'), false);
   assert.equal(dates.isValidDate('2026-02-28'), true);
   assert.deepEqual(dates.overlapDates('2026-11-16', '2026-11-18', '2026-11-18', '2026-11-20'), ['2026-11-18']);
@@ -147,14 +204,14 @@ test('date ranges are validated', () => {
 });
 
 /* ============================================================ authentication */
-test('health endpoint answers without signing in', async () => {
+isolatedTest('health endpoint answers without signing in', async () => {
   const client = makeClient();
   const res = await client.get('/api/health');
   assert.equal(res.status, 200);
   assert.equal(res.data.ok, true);
 });
 
-test('valid credentials sign in and reveal the role', async () => {
+isolatedTest('valid credentials sign in and reveal the role', async () => {
   const client = makeClient();
   const res = await client.signin(ACCOUNTS.employee);
   assert.equal(res.status, 200);
@@ -163,26 +220,26 @@ test('valid credentials sign in and reveal the role', async () => {
   assert.ok(res.data.csrfToken);
 });
 
-test('passwords are stored as scrypt hashes, never plain text', () => {
+isolatedTest('passwords are stored as scrypt hashes, never plain text', () => {
   const row = db.prepare('SELECT password_hash FROM users WHERE email = ?').get(ACCOUNTS.employee);
   assert.match(row.password_hash, /^scrypt\$\d+\$\d+\$\d+\$/);
   assert.ok(!row.password_hash.includes(PASSWORD));
 });
 
-test('a wrong password is refused', async () => {
+isolatedTest('a wrong password is refused', async () => {
   const client = makeClient();
   const res = await client.signin(ACCOUNTS.employee, 'WrongPassword1');
   assert.equal(res.status, 401);
   assert.equal(res.data.error.code, 'unauthorized');
 });
 
-test('an unknown e-mail is refused', async () => {
+isolatedTest('an unknown e-mail is refused', async () => {
   const client = makeClient();
   const res = await client.signin('nobody@example.test');
   assert.equal(res.status, 401);
 });
 
-test('repeated failures lock the account out for a while', async () => {
+isolatedTest('repeated failures lock the account out for a while', async () => {
   const client = makeClient();
   for (let i = 0; i < 5; i += 1) await client.signin('meera.employee@example.test', `nope${i}1`);
   const res = await client.signin('meera.employee@example.test', PASSWORD);
@@ -190,7 +247,7 @@ test('repeated failures lock the account out for a while', async () => {
   db.prepare('DELETE FROM signin_attempts WHERE email = ?').run('meera.employee@example.test');
 });
 
-test('private endpoints reject an unauthenticated caller', async () => {
+isolatedTest('private endpoints reject an unauthenticated caller', async () => {
   const client = makeClient();
   for (const url of ['/api/dashboard', '/api/leave-requests', '/api/balances', '/api/notifications', '/api/calendar']) {
     const res = await client.get(url);
@@ -199,14 +256,14 @@ test('private endpoints reject an unauthenticated caller', async () => {
   }
 });
 
-test('state-changing requests need the form token (CSRF guard)', async () => {
+isolatedTest('state-changing requests need the form token (CSRF guard)', async () => {
   const client = await as('employee');
   client.clearCsrf();
   const res = await client.post('/api/leave-requests', { reason: 'no token here at all' });
   assert.equal(res.status, 403);
 });
 
-test('sign-up creates an employee only, never an admin', async () => {
+isolatedTest('sign-up creates an employee only, never an admin', async () => {
   const client = makeClient();
   const res = await client.signup({
     name: 'Test Signup User',
@@ -218,7 +275,7 @@ test('sign-up creates an employee only, never an admin', async () => {
   assert.equal(res.data.user.role, 'employee');
 });
 
-test('sign-up rejects a weak password and a duplicate e-mail', async () => {
+isolatedTest('sign-up rejects a weak password and a duplicate e-mail', async () => {
   const client = makeClient();
   const weak = await client.signup({ name: 'Weak Pass', email: `weak.${Date.now()}@example.test`, password: 'abc' });
   assert.equal(weak.status, 422);
@@ -227,7 +284,7 @@ test('sign-up rejects a weak password and a duplicate e-mail', async () => {
 });
 
 /* ============================================================== permissions */
-test('an employee cannot reach manager or admin endpoints', async () => {
+isolatedTest('an employee cannot reach manager or admin endpoints', async () => {
   const client = await as('employee');
   const audit = await client.get('/api/audit-logs');
   assert.equal(audit.status, 403);
@@ -247,17 +304,18 @@ test('an employee cannot reach manager or admin endpoints', async () => {
   assert.equal(createUser.status, 403);
 });
 
-test('a manager cannot reach admin-only endpoints', async () => {
+isolatedTest('a manager cannot reach admin-only endpoints', async () => {
   const client = await as('manager');
   assert.equal((await client.get('/api/audit-logs')).status, 403);
-  assert.equal((await client.get('/api/leave-requests/1/reverse')).status, 403);
+  // Reversing is a POST: submit it rather than reading the address.
+  assert.equal((await client.post('/api/leave-requests/1/reverse', {})).status, 403);
   const createAdmin = await client.post('/api/users', {
     name: 'Manager Made Admin', email: `mm.${Date.now()}@example.test`, password: 'Password123', role: 'admin',
   });
   assert.equal(createAdmin.status, 403);
 });
 
-test('an employee cannot read another employee\'s balance', async () => {
+isolatedTest('an employee cannot read another employee\'s balance', async () => {
   const client = await as('employee');
   const me = (await client.get('/api/auth/me')).data.user;
   const other = db.prepare('SELECT id FROM users WHERE email = ?').get(ACCOUNTS.employee3);
@@ -267,7 +325,7 @@ test('an employee cannot read another employee\'s balance', async () => {
   assert.equal(own.status, 200);
 });
 
-test('a manager only sees their own team\'s balances', async () => {
+isolatedTest('a manager only sees their own team\'s balances', async () => {
   const client = await as('manager');
   const outsider = db.prepare('SELECT id FROM users WHERE email = ?').get(ACCOUNTS.finance);
   const res = await client.get(`/api/balances?userId=${outsider.id}`);
@@ -275,7 +333,7 @@ test('a manager only sees their own team\'s balances', async () => {
 });
 
 /* ============================================================ leave requests */
-test('an employee applies for leave and it starts as pending', async () => {
+isolatedTest('an employee applies for leave and it starts as pending', async () => {
   const client = await as('employee');
   const start = nextMonday(3);
   const res = await applyLeave(client, { type: 'casual', start, end: dates.addDays(start, 1) });
@@ -284,16 +342,16 @@ test('an employee applies for leave and it starts as pending', async () => {
   assert.equal(res.data.workingDays, 2);
 });
 
-test('the balance only drops when a request is approved', async () => {
+isolatedTest('the balance only drops when a request is approved', async () => {
   const employee = await as('employee');
   const manager = await as('manager');
-  const before = (await employee.get('/api/balances')).data.balances.find((b) => b.leaveTypeCode === 'sick');
+  const before = (await employee.get('/api/balances')).data.balances.find((b) => b.code === 'sick');
 
   const start = nextMonday(4);
   const created = await applyLeave(employee, { type: 'sick', start, end: dates.addDays(start, 2) });
   assert.equal(created.status, 201);
 
-  const mid = (await employee.get('/api/balances')).data.balances.find((b) => b.leaveTypeCode === 'sick');
+  const mid = (await employee.get('/api/balances')).data.balances.find((b) => b.code === 'sick');
   assert.equal(mid.usedDays, before.usedDays, 'pending leave must not be deducted');
 
   const decided = await manager.post(`/api/leave-requests/${created.data.request.id}/decision`, {
@@ -302,41 +360,50 @@ test('the balance only drops when a request is approved', async () => {
   assert.equal(decided.status, 200);
   assert.equal(decided.data.request.status, 'approved');
 
-  const afterBalance = (await employee.get('/api/balances')).data.balances.find((b) => b.leaveTypeCode === 'sick');
+  const afterBalance = (await employee.get('/api/balances')).data.balances.find((b) => b.code === 'sick');
   assert.equal(afterBalance.usedDays, before.usedDays + 3);
   assert.equal(afterBalance.remainingDays, before.remainingDays - 3);
 });
 
-test('cancelling an approved leave puts the days back', async () => {
+isolatedTest('cancelling an approved leave puts the days back', async () => {
   const employee = await as('employee');
   const manager = await as('manager');
   const start = nextMonday(5);
   const created = await applyLeave(employee, { type: 'annual', start, end: dates.addDays(start, 1) });
   await manager.post(`/api/leave-requests/${created.data.request.id}/decision`, { action: 'approve', comment: 'ok' });
 
-  const usedAfterApproval = (await employee.get('/api/balances')).data.balances.find((b) => b.leaveTypeCode === 'annual').usedDays;
+  const usedAfterApproval = (await employee.get('/api/balances')).data.balances.find((b) => b.code === 'annual').usedDays;
   const cancelled = await employee.post(`/api/leave-requests/${created.data.request.id}/cancel`, {});
   assert.equal(cancelled.status, 200);
   assert.equal(cancelled.data.request.status, 'cancelled');
 
-  const usedAfterCancel = (await employee.get('/api/balances')).data.balances.find((b) => b.leaveTypeCode === 'annual').usedDays;
+  const usedAfterCancel = (await employee.get('/api/balances')).data.balances.find((b) => b.code === 'annual').usedDays;
   assert.equal(usedAfterCancel, usedAfterApproval - 2);
 });
 
-test('a half day is deducted as 0.5', async () => {
+isolatedTest('a half day is deducted as 0.5', async () => {
   const employee = await as('employee');
   const manager = await as('manager');
-  const day = nextMonday(6);
-  const before = (await employee.get('/api/balances')).data.balances.find((b) => b.leaveTypeCode === 'casual');
+  // Balances are seeded per calendar year, and nextMonday(6) from late November
+  // already lands in the next year, where no balance row exists yet - so the
+  // request was refused for "no days left" rather than testing the half day.
+  // Walk back to the last Monday that is still inside the seeded year.
+  const day = (() => {
+    let cursor = nextMonday(6);
+    const year = new Date().getFullYear();
+    while (Number(cursor.slice(0, 4)) !== year) cursor = dates.addDays(cursor, -7);
+    return cursor;
+  })();
+  const before = (await employee.get('/api/balances')).data.balances.find((b) => b.code === 'casual');
   const created = await applyLeave(employee, { type: 'casual', start: day, end: day, halfDay: 'pm' });
   assert.equal(created.status, 201);
   assert.equal(created.data.workingDays, 0.5);
   await manager.post(`/api/leave-requests/${created.data.request.id}/decision`, { action: 'approve', comment: 'ok' });
-  const after = (await employee.get('/api/balances')).data.balances.find((b) => b.leaveTypeCode === 'casual');
+  const after = (await employee.get('/api/balances')).data.balances.find((b) => b.code === 'casual');
   assert.equal(after.usedDays, before.usedDays + 0.5);
 });
 
-test('a request for more days than the remaining balance is refused', async () => {
+isolatedTest('a request for more days than the remaining balance is refused', async () => {
   const client = await as('employee');
   const start = nextMonday(8);
   const res = await applyLeave(client, { type: 'casual', start, end: dates.addDays(start, 100), reason: 'Far too long a holiday for the balance.' });
@@ -344,7 +411,7 @@ test('a request for more days than the remaining balance is refused', async () =
   assert.match(JSON.stringify(res.data.error), /balance|days/i);
 });
 
-test('invalid input is rejected with field messages', async () => {
+isolatedTest('invalid input is rejected with field messages', async () => {
   const client = await as('employee');
   const start = nextMonday(2);
 
@@ -377,7 +444,7 @@ test('invalid input is rejected with field messages', async () => {
 });
 
 /* ================================================================ approvals */
-test('rejection needs a comment, and works with one', async () => {
+isolatedTest('rejection needs a comment, and works with one', async () => {
   const employee = await as('employee');
   const manager = await as('manager');
   const start = nextMonday(7);
@@ -394,7 +461,7 @@ test('rejection needs a comment, and works with one', async () => {
   assert.equal(rejected.data.request.decisionComment, 'Team is at a conference that day.');
 });
 
-test('the same request cannot be approved twice', async () => {
+isolatedTest('the same request cannot be approved twice', async () => {
   const employee = await as('employee');
   const manager = await as('manager');
   const start = nextMonday(9);
@@ -405,7 +472,7 @@ test('the same request cannot be approved twice', async () => {
   assert.equal(second.status, 409);
 });
 
-test('nobody can approve their own leave', async () => {
+isolatedTest('nobody can approve their own leave', async () => {
   const manager = await as('manager');
   const start = nextMonday(10);
   const created = await applyLeave(manager, { type: 'annual', start, end: start });
@@ -414,7 +481,7 @@ test('nobody can approve their own leave', async () => {
   assert.equal(res.status, 403);
 });
 
-test('a manager cannot decide someone outside their team', async () => {
+isolatedTest('a manager cannot decide someone outside their team', async () => {
   const finance = await as('finance');
   const manager = await as('manager');
   const start = nextMonday(11);
@@ -423,7 +490,7 @@ test('a manager cannot decide someone outside their team', async () => {
   assert.equal(res.status, 403);
 });
 
-test('an admin can decide anything and reverse an approved leave', async () => {
+isolatedTest('an admin can decide anything and reverse an approved leave', async () => {
   const employee = await as('employee');
   const admin = await as('admin');
   const start = nextMonday(12);
@@ -436,7 +503,7 @@ test('an admin can decide anything and reverse an approved leave', async () => {
 });
 
 /* ================================================================== overlap */
-test('overlapping leave is detected across people and types, but not otherwise', async () => {
+isolatedTest('overlapping leave is detected across people and types, but not otherwise', async () => {
   const employee = await as('employee');
   const employee2 = await as('employee2');
   const start = nextMonday(13);
@@ -460,7 +527,7 @@ test('overlapping leave is detected across people and types, but not otherwise',
   assert.equal(weekend.data.hasOverlap, false);
 });
 
-test('the calendar lists approved leave days and flags overlaps', async () => {
+isolatedTest('the calendar lists approved leave days and flags overlaps', async () => {
   const client = await as('employee');
   const month = nextMonday(14).slice(0, 7);
   const res = await client.get(`/api/calendar?month=${month}`);
@@ -472,7 +539,7 @@ test('the calendar lists approved leave days and flags overlaps', async () => {
 });
 
 /* ================================================================== uploads */
-test('a PDF document is stored and only visible to the right people', async () => {
+isolatedTest('a PDF document is stored and only visible to the right people', async () => {
   const employee = await as('employee');
   const outsider = await as('finance');
   const types = (await employee.get('/api/leave-types')).data.leaveTypes;
@@ -498,7 +565,7 @@ test('a PDF document is stored and only visible to the right people', async () =
   assert.equal(other.status, 403);
 });
 
-test('an executable or text file is refused as a document', async () => {
+isolatedTest('an executable or text file is refused as a document', async () => {
   const employee = await as('employee');
   const types = (await employee.get('/api/leave-types')).data.leaveTypes;
   const start = nextMonday(16);
@@ -512,7 +579,7 @@ test('an executable or text file is refused as a document', async () => {
   assert.equal(res.status, 400);
 });
 
-test('an oversized document is refused', async () => {
+isolatedTest('an oversized document is refused', async () => {
   const employee = await as('employee');
   const types = (await employee.get('/api/leave-types')).data.leaveTypes;
   const start = nextMonday(17);
@@ -528,7 +595,7 @@ test('an oversized document is refused', async () => {
 });
 
 /* ================================================================= failures */
-test('missing ids give 404 and malformed ids give 400, with clean JSON', async () => {
+isolatedTest('missing ids give 404 and malformed ids give 400, with clean JSON', async () => {
   const client = await as('employee');
   const missing = await client.get('/api/leave-requests/999999');
   assert.equal(missing.status, 404);
@@ -544,7 +611,7 @@ test('missing ids give 404 and malformed ids give 400, with clean JSON', async (
   assert.ok(!JSON.stringify(unknownRoute.data).includes('at '), 'no stack trace leaks');
 });
 
-test('another employee\'s request cannot be read or cancelled', async () => {
+isolatedTest('another employee\'s request cannot be read or cancelled', async () => {
   const owner = await as('employee');
   const outsider = await as('finance');
   const start = nextMonday(18);
@@ -557,7 +624,7 @@ test('another employee\'s request cannot be read or cancelled', async () => {
   assert.equal(cancel.status, 403);
 });
 
-test('the audit log records actions and is read-only', async () => {
+isolatedTest('the audit log records actions and is read-only', async () => {
   const admin = await as('admin');
   const res = await admin.get('/api/audit-logs');
   assert.equal(res.status, 200);
@@ -576,7 +643,7 @@ test('the audit log records actions and is read-only', async () => {
   assert.equal(deleteAttempt.status, 404);
 });
 
-test('notifications reach the manager and the employee, and can be marked read', async () => {
+isolatedTest('notifications reach the manager and the employee, and can be marked read', async () => {
   const employee = await as('employee');
   const manager = await as('manager');
   const start = nextMonday(19);
@@ -598,7 +665,7 @@ test('notifications reach the manager and the employee, and can be marked read',
   assert.equal(afterRead.data.unreadCount, employeeNotes.data.unreadCount - 1);
 });
 
-test('signing out ends the session', async () => {
+isolatedTest('signing out ends the session', async () => {
   const client = await as('employee');
   assert.equal((await client.get('/api/dashboard')).status, 200);
   const out = await client.post('/api/auth/signout', {});
@@ -606,7 +673,7 @@ test('signing out ends the session', async () => {
   assert.equal((await client.get('/api/dashboard')).status, 401);
 });
 
-test('the dashboard shows balances, pending and history for the signed-in user', async () => {
+isolatedTest('the dashboard shows balances, pending and history for the signed-in user', async () => {
   const client = await as('employee');
   const res = await client.get('/api/dashboard');
   assert.equal(res.status, 200);
@@ -614,7 +681,7 @@ test('the dashboard shows balances, pending and history for the signed-in user',
   assert.ok('pending' in res.data && 'approved' in res.data);
 });
 
-test('the calendar endpoint refuses a bad month', async () => {
+isolatedTest('the calendar endpoint refuses a bad month', async () => {
   const client = await as('manager');
   assert.equal((await client.get('/api/calendar?month=nope')).status, 400);
 });
