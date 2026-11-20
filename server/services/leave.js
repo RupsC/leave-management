@@ -1,6 +1,6 @@
 'use strict';
 
-const { badRequest, conflict, forbidden, notFound } = require('../lib/errors');
+const { ApiError, badRequest, conflict, forbidden, notFound, validationFailed } = require('../lib/errors');
 const { countLeaveDays, countWorkingDays, eachDate, isWeekend, nowIso, todayIso } = require('../lib/dates');
 const { writeAudit } = require('../lib/audit');
 const { notify, notifyAdmins } = require('../lib/notify');
@@ -169,7 +169,7 @@ function createLeaveService(db) {
       throw conflict('That leave has already been returned to the balance.');
     }
     if (usedAfter > Number(before.entitled_days)) {
-      throw badRequest('This request would take the leave balance below zero.', {
+      throw new ApiError(422, 'insufficient_balance', 'This request would take the leave balance below zero.', {
         leaveTypeId,
         year,
         remainingDays: beforeSnapshot.remainingDays,
@@ -227,13 +227,19 @@ function createLeaveService(db) {
 
     const days = countLeaveDays(startDate, endDate, halfDay);
     if (days <= 0) {
-      throw badRequest('Those dates contain no working days (weekends are not counted).');
+      // Field-level refusal: the dates are the problem, so the form can point at them.
+      throw validationFailed([
+        { field: 'startDate', message: 'Those dates contain no working days.' },
+        { field: 'endDate', message: 'Weekends are not counted as leave days, so pick at least one weekday.' },
+      ]);
     }
 
     const year = Number(startDate.slice(0, 4));
     const remaining = remainingFor(user.id, leaveTypeId, year);
     if (days > remaining) {
-      throw badRequest(
+      throw new ApiError(
+        422,
+        'insufficient_balance',
         `This request needs ${days} day(s) of ${leaveType.name} but only ${remaining} day(s) remain.`,
         { leaveTypeId, year, requestedDays: days, remainingDays: remaining },
       );
