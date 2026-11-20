@@ -31,6 +31,26 @@ let base;
 let db;
 
 /* ------------------------------------------------------------------ client */
+
+// The response has to hand back every Set-Cookie value, otherwise the client
+// below never stores the session cookie and every later request looks signed
+// out. `Headers.getSetCookie()` only exists on newer runtimes (and on Node 18
+// it is missing entirely), so fall back to the combined `set-cookie` header and
+// split it on the commas that start a new cookie name - never on the commas
+// inside an `Expires=Wed, 21 Oct 2026 ...` date.
+function readSetCookies(headers) {
+  if (typeof headers.getSetCookie === 'function') {
+    const list = headers.getSetCookie();
+    if (Array.isArray(list) && list.length > 0) return list;
+  }
+  const raw = headers.get('set-cookie');
+  if (!raw) return [];
+  return raw
+    .split(/,(?=\s*[^;=,\s]+=)/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 function makeClient() {
   const cookieJar = new Map();
   let csrf = null;
@@ -47,8 +67,7 @@ function makeClient() {
     if (form) opts.body = form;
 
     const res = await fetch(`${base}${url}`, opts);
-    const setCookie = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
-    for (const raw of setCookie) {
+    for (const raw of readSetCookies(res.headers)) {
       const [pair] = raw.split(';');
       const idx = pair.indexOf('=');
       const name = pair.slice(0, idx).trim();
@@ -250,7 +269,8 @@ test('an employee cannot reach manager or admin endpoints', async () => {
 test('a manager cannot reach admin-only endpoints', async () => {
   const client = await as('manager');
   assert.equal((await client.get('/api/audit-logs')).status, 403);
-  assert.equal((await client.get('/api/leave-requests/1/reverse')).status, 403);
+  // Reversing is a POST: submit it rather than reading the address.
+  assert.equal((await client.post('/api/leave-requests/1/reverse', {})).status, 403);
   const createAdmin = await client.post('/api/users', {
     name: 'Manager Made Admin', email: `mm.${Date.now()}@example.test`, password: 'Password123', role: 'admin',
   });
@@ -287,13 +307,13 @@ test('an employee applies for leave and it starts as pending', async () => {
 test('the balance only drops when a request is approved', async () => {
   const employee = await as('employee');
   const manager = await as('manager');
-  const before = (await employee.get('/api/balances')).data.balances.find((b) => b.leaveTypeCode === 'sick');
+  const before = (await employee.get('/api/balances')).data.balances.find((b) => b.code === 'sick');
 
   const start = nextMonday(4);
   const created = await applyLeave(employee, { type: 'sick', start, end: dates.addDays(start, 2) });
   assert.equal(created.status, 201);
 
-  const mid = (await employee.get('/api/balances')).data.balances.find((b) => b.leaveTypeCode === 'sick');
+  const mid = (await employee.get('/api/balances')).data.balances.find((b) => b.code === 'sick');
   assert.equal(mid.usedDays, before.usedDays, 'pending leave must not be deducted');
 
   const decided = await manager.post(`/api/leave-requests/${created.data.request.id}/decision`, {
@@ -302,7 +322,7 @@ test('the balance only drops when a request is approved', async () => {
   assert.equal(decided.status, 200);
   assert.equal(decided.data.request.status, 'approved');
 
-  const afterBalance = (await employee.get('/api/balances')).data.balances.find((b) => b.leaveTypeCode === 'sick');
+  const afterBalance = (await employee.get('/api/balances')).data.balances.find((b) => b.code === 'sick');
   assert.equal(afterBalance.usedDays, before.usedDays + 3);
   assert.equal(afterBalance.remainingDays, before.remainingDays - 3);
 });
@@ -314,12 +334,12 @@ test('cancelling an approved leave puts the days back', async () => {
   const created = await applyLeave(employee, { type: 'annual', start, end: dates.addDays(start, 1) });
   await manager.post(`/api/leave-requests/${created.data.request.id}/decision`, { action: 'approve', comment: 'ok' });
 
-  const usedAfterApproval = (await employee.get('/api/balances')).data.balances.find((b) => b.leaveTypeCode === 'annual').usedDays;
+  const usedAfterApproval = (await employee.get('/api/balances')).data.balances.find((b) => b.code === 'annual').usedDays;
   const cancelled = await employee.post(`/api/leave-requests/${created.data.request.id}/cancel`, {});
   assert.equal(cancelled.status, 200);
   assert.equal(cancelled.data.request.status, 'cancelled');
 
-  const usedAfterCancel = (await employee.get('/api/balances')).data.balances.find((b) => b.leaveTypeCode === 'annual').usedDays;
+  const usedAfterCancel = (await employee.get('/api/balances')).data.balances.find((b) => b.code === 'annual').usedDays;
   assert.equal(usedAfterCancel, usedAfterApproval - 2);
 });
 
@@ -327,12 +347,12 @@ test('a half day is deducted as 0.5', async () => {
   const employee = await as('employee');
   const manager = await as('manager');
   const day = nextMonday(6);
-  const before = (await employee.get('/api/balances')).data.balances.find((b) => b.leaveTypeCode === 'casual');
+  const before = (await employee.get('/api/balances')).data.balances.find((b) => b.code === 'casual');
   const created = await applyLeave(employee, { type: 'casual', start: day, end: day, halfDay: 'pm' });
   assert.equal(created.status, 201);
   assert.equal(created.data.workingDays, 0.5);
   await manager.post(`/api/leave-requests/${created.data.request.id}/decision`, { action: 'approve', comment: 'ok' });
-  const after = (await employee.get('/api/balances')).data.balances.find((b) => b.leaveTypeCode === 'casual');
+  const after = (await employee.get('/api/balances')).data.balances.find((b) => b.code === 'casual');
   assert.equal(after.usedDays, before.usedDays + 0.5);
 });
 
