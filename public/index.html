@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Leave Management</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#/dashboard">
+        <span class="brand-mark" aria-hidden="true">LM</span>
+        <span class="brand-text">Leave Management</span>
+      </a>
+      <nav class="mainnav" id="mainnav" aria-label="Main"></nav>
+      <div class="topbar-right">
+        <a class="bell" href="#/notifications" id="bell" aria-label="Notifications">
+          <span aria-hidden="true">🔔</span><span class="badge" id="unreadBadge" hidden>0</span>
+        </a>
+        <span class="who" id="who"></span>
+        <button class="btn btn-ghost btn-sm" id="signOutBtn" type="button" hidden>Sign out</button>
+      </div>
+    </header>
+
+    <main id="view" class="view" aria-live="polite">
+      <p class="muted">Loading&hellip;</p>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
