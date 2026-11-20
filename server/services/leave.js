@@ -111,7 +111,7 @@ function createLeaveService(db) {
            AND (? IS NULL OR r.id <> ?)
          ORDER BY r.start_date, u.name`,
       )
-      .all(startDate, endDate, excludeUserId, excludeUserId, excludeRequestId, excludeRequestId);
+      .all(endDate, startDate, excludeUserId, excludeUserId, excludeRequestId, excludeRequestId);
 
     return rows.map((row) => {
       const from = row.startDate > startDate ? row.startDate : startDate;
@@ -189,7 +189,7 @@ function createLeaveService(db) {
 
     writeAudit(db, {
       actorId,
-      action: 'balance.change',
+      action: 'leave_balance.change',
       entityType: 'leave_balance',
       entityId: before.id,
       before: beforeSnapshot,
@@ -278,7 +278,7 @@ function createLeaveService(db) {
 
       writeAudit(db, {
         actorId: user.id,
-        action: 'request.create',
+        action: 'leave_request.create',
         entityType: 'leave_request',
         entityId: newId,
         after: {
@@ -381,7 +381,7 @@ function createLeaveService(db) {
 
       writeAudit(db, {
         actorId: actor.id,
-        action: action === 'approve' ? 'request.approve' : 'request.reject',
+        action: action === 'approve' ? 'leave_request.approve' : 'leave_request.reject',
         entityType: 'leave_request',
         entityId: requestId,
         before: { status: 'pending' },
@@ -470,7 +470,7 @@ function createLeaveService(db) {
 
       writeAudit(db, {
         actorId: actor.id,
-        action: wasApproved ? 'request.reverse' : 'request.cancel',
+        action: wasApproved ? 'leave_request.reverse' : 'leave_request.cancel',
         entityType: 'leave_request',
         entityId: requestId,
         before: { status: request.status },
