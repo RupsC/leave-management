@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140" role="img" aria-label="A quiet inbox">
+  <ellipse cx="100" cy="122" rx="60" ry="9" fill="#e7ece8"/>
+  <rect x="46" y="42" width="108" height="68" rx="14" fill="#ffffff" stroke="#cfdcd6" stroke-width="3"/>
+  <path d="M46 60l54 30 54-30" fill="none" stroke="#1d6f68" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="150" cy="40" r="16" fill="#f6d9c9"/>
+  <path d="M143 40l5 5 9-10" fill="none" stroke="#b34a2c" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M64 24h36" stroke="#cfdcd6" stroke-width="4" stroke-linecap="round"/>
+</svg>

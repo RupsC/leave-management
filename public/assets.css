@@ -1,0 +1,23 @@
+/* ==========================================================================
+   LeaveLedger - imagery
+   The photographs and web fonts are drawn with CSS instead of shipped as
+   image files, so the app stays a single lightweight folder: nothing is
+   downloaded from the internet at runtime and no large binaries are needed.
+   ========================================================================== */
+
+:root {
+  /* Dashboard banner: teal depth, a coral horizon, faint window light. */
+  --photo-dashboard:
+    radial-gradient(120% 90% at 12% 8%, rgba(255, 176, 138, 0.55) 0%, rgba(255, 176, 138, 0) 45%),
+    radial-gradient(90% 120% at 92% 0%, rgba(126, 214, 200, 0.45) 0%, rgba(126, 214, 200, 0) 55%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.10) 0 1px, rgba(255, 255, 255, 0) 1px 46px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.08) 0 1px, rgba(255, 255, 255, 0) 1px 46px),
+    linear-gradient(140deg, #0f4c48 0%, #136a63 55%, #1c8a7c 100%);
+
+  /* Sign-in panel: warm paper with a coral sunrise over teal. */
+  --photo-signin:
+    radial-gradient(70% 55% at 78% 18%, rgba(255, 158, 122, 0.75) 0%, rgba(255, 158, 122, 0) 60%),
+    radial-gradient(80% 60% at 12% 92%, rgba(24, 140, 129, 0.55) 0%, rgba(24, 140, 129, 0) 62%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0 2px, rgba(255, 255, 255, 0) 2px 22px),
+    linear-gradient(160deg, #0d403d 0%, #14615b 48%, #c9704f 100%);
+}
