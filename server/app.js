@@ -47,7 +47,8 @@ function createApp(options = {}) {
         "style-src 'self'",
         "script-src 'self'",
         "connect-src 'self'",
-        "font-src 'self'",
+        // data: is needed only for the typefaces bundled inside assets.css.
+        "font-src 'self' data:",
         "form-action 'self'",
         "base-uri 'none'",
         "frame-ancestors 'none'",

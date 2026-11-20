@@ -100,7 +100,11 @@ function renderChrome() {
   nav.innerHTML = NAV.filter((item) => item.roles.includes(state.user.role))
     .map((item) => `<a href="${item.href}" data-route="${item.href}">${item.label}</a>`)
     .join('');
-  el('who').textContent = `${state.user.name} · ${state.user.role}`;
+  el('who').innerHTML = (function (u) {
+    const parts = String(u.name || '').trim().split(/\s+/);
+    const initials = ((parts[0] || '?')[0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+    return `<span class="avatar" aria-hidden="true">${esc(initials)}</span><span class="who-text"><strong>${esc(u.name)}</strong><span class="who-role">${esc(u.role)}</span></span>`;
+  })(state.user);
   el('signOutBtn').hidden = false;
   setUnread(state.user.unreadCount ?? 0);
   highlightNav();
