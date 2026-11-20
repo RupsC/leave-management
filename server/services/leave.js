@@ -111,7 +111,7 @@ function createLeaveService(db) {
            AND (? IS NULL OR r.id <> ?)
          ORDER BY r.start_date, u.name`,
       )
-      .all(startDate, endDate, excludeUserId, excludeUserId, excludeRequestId, excludeRequestId);
+      .all(endDate, startDate, excludeUserId, excludeUserId, excludeRequestId, excludeRequestId);
 
     return rows.map((row) => {
       const from = row.startDate > startDate ? row.startDate : startDate;
