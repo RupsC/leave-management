@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140" role="img" aria-label="An empty calendar">
+  <ellipse cx="100" cy="122" rx="66" ry="10" fill="#e7ece8"/>
+  <rect x="40" y="26" width="120" height="86" rx="16" fill="#ffffff" stroke="#cfdcd6" stroke-width="3"/>
+  <path d="M40 52h120" stroke="#cfdcd6" stroke-width="3"/>
+  <path d="M70 18v16M130 18v16" stroke="#1d6f68" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="78" cy="76" r="7" fill="#dbe8e3"/>
+  <circle cx="100" cy="76" r="7" fill="#dbe8e3"/>
+  <circle cx="122" cy="76" r="7" fill="#dbe8e3"/>
+  <circle cx="78" cy="96" r="7" fill="#dbe8e3"/>
+  <circle cx="122" cy="96" r="7" fill="#dbe8e3"/>
+  <circle cx="100" cy="96" r="9" fill="#e86a4f" opacity="0.85"/>
+</svg>
