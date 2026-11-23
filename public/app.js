@@ -72,8 +72,8 @@ function failure(err) {
     <button class="btn btn-outline" onclick="location.reload()">Try again</button>`;
 }
 
-function emptyBox(icon, title, text) {
-  return `<div class="empty"><div class="big" aria-hidden="true">${icon}</div>
+function emptyBox(icon, title, text, variant = 'default') {
+  return `<div class="empty" data-empty="${esc(variant)}"><div class="big" aria-hidden="true">${icon}</div>
     <h3>${esc(title)}</h3><p class="muted">${esc(text)}</p></div>`;
 }
 
@@ -100,7 +100,11 @@ function renderChrome() {
   nav.innerHTML = NAV.filter((item) => item.roles.includes(state.user.role))
     .map((item) => `<a href="${item.href}" data-route="${item.href}">${item.label}</a>`)
     .join('');
-  el('who').textContent = `${state.user.name} · ${state.user.role}`;
+  el('who').innerHTML = (function (u) {
+    const parts = String(u.name || '').trim().split(/\s+/);
+    const initials = ((parts[0] || '?')[0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+    return `<span class="avatar" aria-hidden="true">${esc(initials)}</span><span class="who-text"><strong>${esc(u.name)}</strong><span class="who-role">${esc(u.role)}</span></span>`;
+  })(state.user);
   el('signOutBtn').hidden = false;
   setUnread(state.user.unreadCount ?? 0);
   highlightNav();
@@ -455,7 +459,7 @@ async function renderRequests() {
             ? `<button class="btn btn-sm btn-outline" data-cancel="${r.id}">Cancel</button>` : ''}
             ${r.attachmentCount ? `<button class="btn btn-sm btn-outline" data-doc="${r.id}">Document</button>` : ''}</td>
         </tr>`).join('')}</tbody></table></div>`
-        : emptyBox('🗂️', 'Nothing here yet', 'Your leave requests will appear in this list.')}
+        : emptyBox('🗂️', 'Nothing here yet', 'Your leave requests will appear in this list.', 'requests')}
     </div>`;
   el('statusFilter').onchange = (e) => {
     state.requestStatus = e.target.value;
@@ -470,49 +474,73 @@ async function renderRequests() {
 /* ----------------------------------------------------------------- approvals */
 async function renderApprovals() {
   if (state.user.role === 'employee') {
-    view().innerHTML = `<div class="error-box">Approvals are for managers and admins.</div>`;
+    view().innerHTML = '<div class="error-box">Approvals are for managers and admins.</div>';
     return;
   }
   loading('Loading the approval queue…');
-  const scope = state.user.role === 'admin' ? 'all' : 'team';
-  const data = await api(`/leave-requests?scope=${scope}&status=pending`);
+  const isAdmin = state.user.role === 'admin';
+  const scope = isAdmin ? 'all' : 'team';
+  const status = state.approvalStatus === undefined ? 'pending' : state.approvalStatus;
+  const data = await api('/leave-requests?scope=' + scope + (status ? '&status=' + encodeURIComponent(status) : ''));
   const queue = data.requests.filter((r) => r.userId !== state.user.id);
-  view().innerHTML = `
-    <div class="page-head"><div><h1>Approvals</h1>
-      <p class="muted">${state.user.role === 'admin' ? 'Every pending request in the company.' : 'Pending requests from your team.'}
-      You cannot approve your own leave.</p></div></div>
-    <div class="card">
-      ${queue.length ? queue.map((r) => `
-        <div style="border-bottom:1px solid var(--line);padding:14px 0">
-          <div class="page-head" style="margin-bottom:8px">
-            <div>
-              <h3>${esc(r.employeeName)} · <span class="dot" style="background:${esc(r.leaveTypeColor)}"></span>${esc(r.leaveType)}</h3>
-              <p class="muted">${fmtDate(r.startDate)} → ${fmtDate(r.endDate)} · ${days(r.workingDays)}${r.halfDay !== 'none' ? ` (half day, ${esc(r.halfDay)})` : ''}</p>
-              <p class="muted">Reason: ${esc(r.reason)}</p>
-              ${r.attachmentCount ? `<button class="btn btn-sm btn-outline" data-doc="${r.id}">Open document</button>` : ''}
-            </div>
-            <span class="pill pending">pending</span>
-          </div>
-          <div class="field" style="margin-bottom:8px">
-            <label for="comment-${r.id}">Comment <span class="muted">(required to reject)</span></label>
-            <input id="comment-${r.id}" data-comment="${r.id}" maxlength="500" placeholder="Add a short note" />
-          </div>
-          <div class="btn-row">
-            <button class="btn btn-approve btn-sm" data-approve="${r.id}">Approve</button>
-            <button class="btn btn-reject btn-sm" data-reject="${r.id}">Reject</button>
-          </div>
-        </div>`).join('')
-        : emptyBox('✅', 'No requests waiting', 'When your team applies for leave it appears here.')}
-    </div>`;
+  const options = [
+    ['pending', 'Waiting for a decision'],
+    ['approved', 'Approved'],
+    ['rejected', 'Rejected'],
+    ['cancelled', 'Cancelled or reversed'],
+    ['', 'Everything'],
+  ];
+  const cards = queue
+    .map((r) => {
+      const canDecide = r.status === 'pending';
+      const canReverse = isAdmin && r.status === 'approved';
+      return (
+        '<article class="approval-row"><div class="approval-head"><div>' +
+        '<h3>' + esc(r.employeeName) + ' · <span class="dot" style="background:' + esc(r.leaveTypeColor) + '"></span>' + esc(r.leaveType) + '</h3>' +
+        '<p class="muted">' + fmtDate(r.startDate) + ' → ' + fmtDate(r.endDate) + ' · ' + days(r.workingDays) +
+        (r.halfDay !== 'none' ? ' (half day, ' + esc(r.halfDay) + ')' : '') + '</p>' +
+        '<p class="muted">Reason: ' + esc(r.reason) + '</p></div>' +
+        '<span class="pill ' + esc(r.status) + '">' + esc(r.status) + '</span></div>' +
+        (r.attachmentCount ? '<div class="btn-row"><button class="btn btn-sm btn-outline" data-doc="' + r.id + '">Open document</button></div>' : '') +
+        (canDecide
+          ? '<div class="field approval-comment"><label for="comment-' + r.id + '">Comment <span class="muted">(required to reject)</span></label>' +
+            '<input id="comment-' + r.id + '" data-comment="' + r.id + '" maxlength="500" placeholder="Add a short note" /></div>' +
+            '<div class="btn-row"><button class="btn btn-approve btn-sm" data-approve="' + r.id + '">Approve</button>' +
+            '<button class="btn btn-reject btn-sm" data-reject="' + r.id + '">Reject</button></div>'
+          : '') +
+        (canReverse
+          ? '<div class="btn-row"><button class="btn btn-reverse btn-sm" data-reverse="' + r.id + '">Reverse decision</button></div>'
+          : '') +
+        '</article>'
+      );
+    })
+    .join('');
+
+  const emptyText =
+    status === 'pending'
+      ? 'When someone applies for leave it appears here.'
+      : 'No requests with this status yet.';
+
+  view().innerHTML =
+    '<div class="page-head"><div><h1>Approvals</h1><p class="muted">' +
+    (isAdmin ? 'Every request in the company.' : 'Requests from your team.') +
+    ' You cannot decide your own leave.</p></div></div>' +
+    '<section class="card"><div class="filter-row"><div class="field"><label for="approvalFilter">Show</label>' +
+    '<select id="approvalFilter">' +
+    options.map((o) => '<option value="' + o[0] + '"' + (status === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>').join('') +
+    '</select></div><p class="muted filter-count">' + queue.length + ' request' + (queue.length === 1 ? '' : 's') + '</p></div>' +
+    (queue.length ? '<div class="approval-list">' + cards + '</div>' : emptyBox('✅', 'Nothing here', emptyText)) +
+    '</section>';
 
   async function decide(id, action) {
-    const comment = (view().querySelector(`[data-comment="${id}"]`) || {}).value || '';
+    const box = view().querySelector('[data-comment="' + id + '"]');
+    const comment = box ? box.value : '';
     if (action === 'reject' && !comment.trim()) {
       toast('Please write a reason before rejecting.', true);
       return;
     }
     try {
-      await api(`/leave-requests/${id}/decision`, { method: 'POST', body: { action, comment } });
+      await api('/leave-requests/' + id + '/decision', { method: 'POST', body: { action, comment } });
       toast(action === 'approve' ? 'Request approved and balance updated.' : 'Request rejected.');
       renderApprovals();
       refreshUnread();
@@ -522,12 +550,36 @@ async function renderApprovals() {
     }
   }
 
-  view().querySelectorAll('[data-approve]').forEach((b) => { b.onclick = () => decide(Number(b.dataset.approve), 'approve'); });
-  view().querySelectorAll('[data-reject]').forEach((b) => { b.onclick = () => decide(Number(b.dataset.reject), 'reject'); });
+  async function reverse(id) {
+    try {
+      await api('/leave-requests/' + id + '/reverse', { method: 'POST', body: {} });
+      toast('Approval reversed and the days returned to the balance.');
+      renderApprovals();
+      refreshUnread();
+    } catch (err) {
+      toast(err.message, true);
+      if (err.status === 409 || err.status === 403) renderApprovals();
+    }
+  }
+
+  el('approvalFilter').onchange = (e) => {
+    state.approvalStatus = e.target.value;
+    renderApprovals().catch(failure);
+  };
+  view().querySelectorAll('[data-approve]').forEach((b) => {
+    b.onclick = () => decide(Number(b.dataset.approve), 'approve');
+  });
+  view().querySelectorAll('[data-reject]').forEach((b) => {
+    b.onclick = () => decide(Number(b.dataset.reject), 'reject');
+  });
+  view().querySelectorAll('[data-reverse]').forEach((b) => {
+    b.onclick = () => reverse(Number(b.dataset.reverse));
+  });
   view().querySelectorAll('[data-doc]').forEach((b) => {
-    b.onclick = () => window.open(`/api/leave-requests/${b.dataset.doc}/attachment`, '_blank');
+    b.onclick = () => window.open('/api/leave-requests/' + b.dataset.doc + '/attachment', '_blank');
   });
 }
+
 
 /* ------------------------------------------------------------------ calendar */
 async function renderCalendar() {
@@ -584,7 +636,7 @@ async function renderCalendar() {
       ${data.overlaps.length ? `<div class="overlap-list">${data.overlaps.map((o) => `
         <div class="overlap-item"><strong>${fmtDate(o.date)}:</strong>
           ${o.people.map((p) => `${esc(p.employeeName)} (${esc(p.leaveType)})`).join(', ')} are all away.</div>`).join('')}</div>`
-        : emptyBox('🙌', 'No overlaps this month', 'Nobody shares the same leave day in this month.')}
+        : emptyBox('🙌', 'No overlaps this month', 'Nobody shares the same leave day in this month.', 'calendar')}
     </section>`;
 
   el('prevMonth').onclick = () => { state.calMonth = shiftMonth(month, -1); renderCalendar().catch(failure); };
@@ -616,7 +668,7 @@ async function renderNotifications() {
           </div>
           ${n.isRead ? '' : `<button class="btn btn-sm btn-outline" data-read="${n.id}">Mark read</button>`}
         </div>`).join('')
-        : emptyBox('🔔', 'No notifications yet', 'You will be told here when something happens to your leave.')}
+        : emptyBox('🔔', 'No notifications yet', 'You will be told here when something happens to your leave.', 'notifications')}
     </section>`;
   setUnread(data.unreadCount);
   view().querySelectorAll('[data-read]').forEach((b) => {
@@ -639,6 +691,86 @@ async function renderNotifications() {
 }
 
 /* ----------------------------------------------------------------- audit log */
+/* ------------------------------------------------- audit log wording */
+const ACTION_LABELS = {
+  'auth.signin': 'Signed in',
+  'auth.signin_failed': 'Failed sign-in attempt',
+  'auth.signout': 'Signed out',
+  'user.create': 'Added a person',
+  'user.update': 'Updated a person',
+  'request.create': 'Submitted a leave request',
+  'request.approve': 'Approved a leave request',
+  'request.reject': 'Rejected a leave request',
+  'request.cancel': 'Cancelled a leave request',
+  'request.reverse': 'Reversed an approval',
+  'balance.change': 'Changed a leave balance',
+};
+
+function actionLabel(code) {
+  if (ACTION_LABELS[code]) return ACTION_LABELS[code];
+  return String(code || '')
+    .replace(/[._]+/g, ' ')
+    .replace(/^(.)/, (m) => m.toUpperCase());
+}
+
+const ENTITY_LABELS = {
+  leave_request: 'Leave request',
+  leave_balance: 'Balance',
+  user: 'Person',
+  notification: 'Notification',
+  decision: 'Decision',
+};
+
+function entityLabel(code) {
+  return ENTITY_LABELS[code] || String(code || '').replace(/_/g, ' ');
+}
+
+const FIELD_LABELS = {
+  status: 'status',
+  decidedBy: 'by',
+  decidedAt: 'when',
+  comment: 'comment',
+  workingDays: 'days',
+  usedDays: 'used',
+  remainingDays: 'remaining',
+  entitledDays: 'allowance',
+  year: 'year',
+  delta: 'change',
+  reason: 'reason',
+  isActive: 'active',
+  role: 'role',
+  email: 'email',
+  name: 'name',
+  leaveType: 'leave type',
+};
+
+function changeChips(before, after) {
+  const b = before && typeof before === 'object' ? before : {};
+  const a = after && typeof after === 'object' ? after : {};
+  const keys = Array.from(new Set(Object.keys(b).concat(Object.keys(a))));
+  const show = (v) => (v === null || v === undefined || v === '' ? '—' : String(v));
+  const parts = [];
+  for (const key of keys) {
+    if (key === 'passwordHash' || key === 'ip') continue;
+    const label = FIELD_LABELS[key] || key.replace(/([A-Z])/g, ' $1').toLowerCase();
+    const inB = Object.prototype.hasOwnProperty.call(b, key);
+    const inA = Object.prototype.hasOwnProperty.call(a, key);
+    if (inB && inA && show(b[key]) === show(a[key])) continue;
+    if (!inB) {
+      parts.push('<span class="audit-pair audit-gain">' + esc(label) + ': ' + esc(show(a[key])) + '</span>');
+    } else if (!inA) {
+      parts.push('<span class="audit-pair">' + esc(label) + ' was ' + esc(show(b[key])) + '</span>');
+    } else {
+      parts.push(
+        '<span class="audit-pair">' + esc(label) + ': ' + esc(show(b[key])) +
+          ' <span class="audit-arrow">→</span> ' + esc(show(a[key])) + '</span>',
+      );
+    }
+  }
+  if (!parts.length) return '<span class="muted">No change recorded</span>';
+  return parts.join(' ');
+}
+
 async function renderAudit() {
   if (state.user.role !== 'admin') {
     view().innerHTML = '<div class="error-box">The audit log is for admins only.</div>';
@@ -646,36 +778,36 @@ async function renderAudit() {
   }
   loading('Loading the audit log…');
   const action = state.auditAction || '';
-  const data = await api(`/audit-logs${action ? `?action=${encodeURIComponent(action)}` : ''}`);
-  view().innerHTML = `
-    <div class="page-head">
-      <div><h1>Audit log</h1><p class="muted">Every submission, decision, cancellation and balance change. Records cannot be edited or deleted.</p></div>
-    </div>
-    <section class="card">
-      <div class="field" style="max-width:320px">
-        <label for="actionFilter">Filter by action</label>
-        <select id="actionFilter">
-          <option value="">All actions</option>
-          ${data.actions.map((a) => `<option value="${esc(a)}" ${action === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}
-        </select>
-      </div>
-      ${data.logs.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Item</th><th>Change</th><th>Note</th></tr></thead>
-        <tbody>${data.logs.map((l) => `<tr>
-          <td>${fmtDateTime(l.createdAt)}</td>
-          <td>${esc(l.actorName || 'system')}</td>
-          <td><strong>${esc(l.action)}</strong></td>
-          <td>${esc(l.entityType)} #${esc(l.entityId ?? '—')}</td>
-          <td class="audit-change">${l.before ? `from ${esc(JSON.stringify(l.before))}` : ''}${l.before && l.after ? ' → ' : ''}${l.after ? `to ${esc(JSON.stringify(l.after))}` : ''}</td>
-          <td class="muted">${esc(l.note || '')}</td>
-        </tr>`).join('')}</tbody></table></div>`
-        : emptyBox('📝', 'Nothing logged yet', 'Actions will be recorded here as they happen.')}
-    </section>`;
+  const data = await api('/audit-logs' + (action ? '?action=' + encodeURIComponent(action) : ''));
+  const filterOptions = data.actions
+    .map((a) => '<option value="' + esc(a) + '"' + (action === a ? ' selected' : '') + '>' + esc(actionLabel(a)) + '</option>')
+    .join('');
+  const rows = data.logs
+    .map(
+      (l) =>
+        '<tr><td class="nowrap">' + fmtDateTime(l.createdAt) + '</td>' +
+        '<td>' + esc(l.actorName || 'system') + '</td>' +
+        '<td><strong>' + esc(actionLabel(l.action)) + '</strong></td>' +
+        '<td>' + esc(entityLabel(l.entityType)) + (l.entityId === null || l.entityId === undefined ? '' : ' #' + esc(l.entityId)) + '</td>' +
+        '<td class="audit-change">' + changeChips(l.before, l.after) + '</td>' +
+        '<td class="muted">' + esc(l.note || '') + '</td></tr>',
+    )
+    .join('');
+  view().innerHTML =
+    '<div class="page-head"><div><h1>Audit log</h1>' +
+    '<p class="muted">Every submission, decision, cancellation and balance change. Records cannot be edited or deleted.</p></div></div>' +
+    '<section class="card"><div class="field audit-filter"><label for="actionFilter">Filter by action</label>' +
+    '<select id="actionFilter"><option value="">All actions</option>' + filterOptions + '</select></div>' +
+    (data.logs.length
+      ? '<div class="table-wrap"><table><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Item</th><th>Change</th><th>Note</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      : emptyBox('📝', 'Nothing logged yet', 'Actions will be recorded here as they happen.')) +
+    '</section>';
   el('actionFilter').onchange = (e) => {
     state.auditAction = e.target.value;
     renderAudit().catch(failure);
   };
 }
+
 
 /* -------------------------------------------------------------------- router */
 const ROUTES = {
