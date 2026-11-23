@@ -380,7 +380,10 @@ isolatedTest('the balance only drops when a request is approved', async () => {
 isolatedTest('cancelling an approved leave puts the days back', async () => {
   const employee = await as('employee');
   const manager = await as('manager');
-  const start = nextMonday(5);
+  // Keep the date inside the seeded balance year: late in the year "five weeks
+  // ahead" already lands in a year with no entitlement, and the request would be
+  // refused for "0 days remaining" before the cancellation rule is reached.
+  const start = nextMondayInBalanceYear(5);
   const created = await applyLeave(employee, { type: 'annual', start, end: dates.addDays(start, 1) });
   await manager.post(`/api/leave-requests/${created.data.request.id}/decision`, { action: 'approve', comment: 'ok' });
 
