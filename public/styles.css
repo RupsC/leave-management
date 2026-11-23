@@ -9,7 +9,7 @@
 :root {
   --ink: #12211f;
   --ink-soft: #52645f;
-  --ink-faint: #7b8a85;
+  --ink-faint: #606c68;
   --paper: #f7f5f2;
   --card: #ffffff;
   --line: #e3e9e6;
@@ -229,7 +229,7 @@ a:focus-visible {
   height: 22px;
   padding: 0 6px;
   border-radius: 999px;
-  background: var(--accent);
+  background: #be4a32;
   color: #fff;
   font-size: 0.74rem;
   font-weight: 700;
@@ -367,7 +367,7 @@ a:focus-visible {
   color: var(--brand-deep);
   font-variant-numeric: tabular-nums;
 }
-.stat .label { margin-top: 2px; }
+.stat .label { margin-top: 2px; color: var(--ink-soft); }
 
 .balance-list { display: grid; gap: 12px; }
 .balance-item {
@@ -737,4 +737,61 @@ body:has(.auth-wrap) { background: var(--paper); }
   .auth-card { padding: 22px 18px 30px; }
   .foot-fine { margin-left: 0; }
   .toast { left: 13px; right: 13px; bottom: 13px; max-width: none; }
+}
+
+/* ------------------------------------------- phone polish (375-390px) */
+@media (max-width: 640px) {
+  /* Header wraps into rows instead of a sideways-scrolling strip */
+  .sidebar { flex-wrap: wrap; overflow-x: visible; gap: 10px; padding: 10px 12px; }
+  .mainnav {
+    order: 3;
+    flex-direction: row;
+    flex-wrap: wrap;
+    overflow-x: visible;
+    width: 100%;
+    gap: 6px;
+    padding-bottom: 0;
+  }
+  .mainnav a, .mainnav button {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 6px;
+    font-size: 0.82rem;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.2;
+  }
+  .mainnav a::before { display: none; }
+  .sidebar-foot { margin-left: auto; flex: 0 0 auto; gap: 6px; flex-wrap: nowrap; }
+  .sidebar-foot .btn.btn-sm { min-height: 44px; padding: 8px 12px; }
+  .who { flex: 0 0 auto; }
+
+  /* comfortable tap targets */
+  #view .btn, #view button, #view select, #view summary { min-height: 44px; }
+  #view .btn { padding: 11px 16px; }
+  #view input, #view select, #view textarea { min-height: 44px; font-size: 16px; }
+  #view .btn-sm { min-height: 44px; }
+  .mainnav .badge, .sidebar .badge { min-height: 0; }
+
+  /* nothing may stick out of the screen */
+  #view, #view * { max-width: 100%; }
+  #view img, #view svg { height: auto; }
+  .audit-change, .audit-pair { min-width: 0; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
+  .audit-pair { display: inline; }
+  .audit-filter { max-width: none; }
+  .approval-list { display: block; }
+}
+
+/* history log must not scroll sideways on a phone */
+@media (max-width: 640px) {
+  .audit-change { min-width: 0 !important; white-space: normal !important; }
+  .audit-pair { white-space: normal !important; }
+  .audit-filter { width: 100%; max-width: none; }
+  #view .table-wrap { max-width: 100%; min-width: 0; }
+  #view table, #view tbody, #view tr, #view td, #view th { min-width: 0 !important; }
+  #view td, #view th { white-space: normal !important; overflow-wrap: anywhere; }
 }
