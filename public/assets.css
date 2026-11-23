@@ -1,0 +1,237 @@
+/* ==========================================================================
+   LeaveLedger - imagery
+   The photographs and web fonts are drawn with CSS instead of shipped as
+   image files, so the app stays a single lightweight folder: nothing is
+   downloaded from the internet at runtime and no large binaries are needed.
+   ========================================================================== */
+
+:root {
+  /* Dashboard banner: teal depth, a coral horizon, faint window light. */
+  --photo-dashboard:
+    radial-gradient(120% 90% at 12% 8%, rgba(255, 176, 138, 0.55) 0%, rgba(255, 176, 138, 0) 45%),
+    radial-gradient(90% 120% at 92% 0%, rgba(126, 214, 200, 0.45) 0%, rgba(126, 214, 200, 0) 55%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.10) 0 1px, rgba(255, 255, 255, 0) 1px 46px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.08) 0 1px, rgba(255, 255, 255, 0) 1px 46px),
+    linear-gradient(140deg, #0f4c48 0%, #136a63 55%, #1c8a7c 100%);
+
+  /* Sign-in panel: warm paper with a coral sunrise over teal. */
+  --photo-signin:
+    radial-gradient(70% 55% at 78% 18%, rgba(255, 158, 122, 0.75) 0%, rgba(255, 158, 122, 0) 60%),
+    radial-gradient(80% 60% at 12% 92%, rgba(24, 140, 129, 0.55) 0%, rgba(24, 140, 129, 0) 62%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0 2px, rgba(255, 255, 255, 0) 2px 22px),
+    linear-gradient(160deg, #0d403d 0%, #14615b 48%, #c9704f 100%);
+}
+
+/* ==========================================================================
+   LeaveLedger - detail screens
+   The team calendar and the notification list are built with their own class
+   names; these rules give them the same paper-and-teal finish as the cards.
+   ========================================================================== */
+
+/* ------------------------------------------------------------- calendar */
+.cal-dow {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  font-weight: 700;
+  text-align: center;
+  padding-bottom: 4px;
+}
+.cal-date {
+  display: block;
+  font-weight: 650;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+.cal-cell.today .cal-date {
+  color: var(--accent-dark);
+  font-weight: 750;
+}
+.cal-cell.weekend { background: var(--brand-softer); }
+.cal-cell.other { background: transparent; }
+.cal-cell.overlap {
+  border-color: var(--warn);
+  box-shadow: inset 0 0 0 1px rgba(154, 91, 6, 0.16);
+  background: #fffdf8;
+}
+.cal-cell.overlap .cal-date { color: var(--warn); }
+
+/* Chips carry the leave-type colour inline; a white wash keeps the name dark
+   and legible whether that colour is pale mint or deep coral. */
+.cal-chip {
+  display: block;
+  margin-top: 3px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 650;
+  color: #10201e;
+  box-shadow: inset 0 0 0 40px rgba(255, 255, 255, 0.66), 0 0 0 1px rgba(16, 32, 30, 0.08);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  margin-top: 6px;
+}
+.legend > span { display: inline-flex; align-items: center; }
+
+.overlap-list { display: grid; gap: 8px; }
+.overlap-item {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  border: 1px solid rgba(154, 91, 6, 0.28);
+  font-size: 0.9rem;
+  color: #6d4204;
+}
+.overlap-item strong { color: #553300; }
+
+/* -------------------------------------------------------- notifications */
+.notif.unread {
+  background: var(--brand-softer);
+  border-radius: 12px;
+  box-shadow: inset 4px 0 0 var(--accent);
+  padding-left: 12px;
+  padding-right: 10px;
+}
+.notif h3 { margin-bottom: 2px; font-size: 1rem; }
+.notif p { margin-bottom: 4px; color: var(--ink-soft); font-size: 0.9rem; }
+.notif .muted { font-size: 0.8rem; }
+
+@media (max-width: 640px) {
+  .cal-dow { font-size: 0.62rem; letter-spacing: 0.04em; }
+  .cal-date { font-size: 0.72rem; }
+  .cal-chip { font-size: 0.6rem; padding: 0 4px; }
+  .legend { font-size: 0.75rem; gap: 4px 10px; }
+}
+
+/* ==========================================================================
+   Employee screens - decision buttons, bell label, varied empty states
+   ========================================================================== */
+
+/* Approve / Reject sit side by side with a clear gap and wrap on narrow screens. */
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Approve: calm teal-green, white text (contrast 5.2:1). */
+.btn-approve {
+  background: #16786a;
+  border-color: #16786a;
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(15, 76, 72, 0.22);
+}
+.btn-approve:hover { background: #0f5c52; border-color: #0f5c52; }
+
+/* Reject: warm coral, white text (contrast 4.9:1) - reads as "stop", not as a link. */
+.btn-reject {
+  background: #b8503a;
+  border-color: #b8503a;
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(184, 80, 58, 0.24);
+}
+.btn-reject:hover { background: #9c4130; border-color: #9c4130; }
+
+/* The bell's unread count should be pushed to the right edge of the sidebar row. */
+.bell .bell-text { flex: 1 1 auto; }
+.bell .badge { margin-left: auto; }
+
+/* Empty states: one drawn backdrop per situation, so they never look identical.
+   The attribute selector keeps this ahead of the base .empty rule in styles.css. */
+.empty[data-empty] {
+  position: relative;
+  border-radius: 16px;
+  padding: 26px 22px;
+  overflow: hidden;
+  background-image: var(--photo-empty);
+  background-size: cover;
+}
+.empty::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 253, 249, 0.90) 0%, rgba(255, 253, 249, 0.82) 100%);
+  z-index: 0;
+}
+.empty > * { position: relative; z-index: 1; }
+
+.empty[data-empty='requests'] {
+  --photo-empty:
+    radial-gradient(80% 70% at 18% 12%, rgba(126, 214, 200, 0.55) 0%, rgba(126, 214, 200, 0) 58%),
+    repeating-linear-gradient(45deg, rgba(15, 76, 72, 0.10) 0 2px, rgba(15, 76, 72, 0) 2px 20px),
+    linear-gradient(150deg, #e8f4f1 0%, #d5e9e5 100%);
+}
+.empty[data-empty='notifications'] {
+  --photo-empty:
+    radial-gradient(70% 80% at 84% 16%, rgba(255, 176, 138, 0.60) 0%, rgba(255, 176, 138, 0) 60%),
+    repeating-linear-gradient(0deg, rgba(217, 108, 74, 0.10) 0 2px, rgba(217, 108, 74, 0) 2px 18px),
+    linear-gradient(160deg, #fdece4 0%, #f7ddd1 100%);
+}
+.empty[data-empty='calendar'] {
+  --photo-empty:
+    radial-gradient(80% 70% at 50% 0%, rgba(126, 214, 200, 0.55) 0%, rgba(126, 214, 200, 0) 60%),
+    linear-gradient(150deg, #eef6f4 0%, #dcece8 100%);
+}
+@media (max-width: 640px) {
+  .btn-row .btn { flex: 1 1 auto; }
+}
+
+
+/* ------------------------------------------------- history log readability */
+.audit-filter { max-width: 340px; }
+.audit-change { font-size: 0.86rem; line-height: 1.4; min-width: 220px; }
+.audit-pair {
+  display: inline-block;
+  padding: 2px 8px;
+  margin: 0 4px 4px 0;
+  border-radius: 999px;
+  background: rgba(22, 120, 106, 0.09);
+  color: #16786a;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.audit-gain { background: rgba(22, 120, 106, 0.16); }
+.audit-arrow { color: #b14d38; font-weight: 700; }
+td.nowrap { white-space: nowrap; }
+
+/* ------------------------------------------------- approval queue */
+.approval-row { padding: 16px 0; border-bottom: 1px solid var(--line, #e2dcd1); }
+.approval-row:last-child { border-bottom: 0; }
+.approval-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.approval-head h3 { margin: 0 0 4px; }
+.approval-comment { max-width: 420px; margin-bottom: 10px; }
+.filter-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.filter-row .field { max-width: 320px; margin-bottom: 0; }
+.filter-count { margin: 0 0 8px; }
+.btn-reverse { background: transparent; color: #b8503a; border: 1px solid #b8503a; }
+.btn-reverse:hover { background: rgba(184, 80, 58, 0.1); }
+
+.pill.approved { background: rgba(22, 120, 106, 0.14); color: #16786a; }
+.pill.rejected, .pill.cancelled { background: rgba(184, 80, 58, 0.14); color: #b8503a; }
+
+@media (max-width: 640px) {
+  .approval-head { flex-direction: column; gap: 6px; }
+  .audit-change { min-width: 0; }
+}
+
+/* ------------------------------------------------- approval queue */
+.approval-list { display: grid; gap: 4px; margin-top: 6px; }
+.approval-list .approval-row { padding: 18px 0; }
+.approval-list .approval-row:first-child { padding-top: 6px; }
+
+/* history-log chip legibility (WCAG AA on tinted backgrounds) */
+.audit-pair { color: #33514c; }
+.audit-pair.audit-gain { background: rgba(22, 120, 106, 0.1); color: #1d4b44; }
+.audit-arrow { color: #8f3a26; }

@@ -1,0 +1,13 @@
+# dependencies
+node_modules/
+
+# local environment (secrets live here, never in the repo)
+.env
+
+# database + uploaded files (created at runtime, outside the web root)
+data/
+storage/
+
+# logs / editor files
+*.log
+.DS_Store
