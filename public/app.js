@@ -72,8 +72,8 @@ function failure(err) {
     <button class="btn btn-outline" onclick="location.reload()">Try again</button>`;
 }
 
-function emptyBox(icon, title, text) {
-  return `<div class="empty"><div class="big" aria-hidden="true">${icon}</div>
+function emptyBox(icon, title, text, variant = 'default') {
+  return `<div class="empty" data-empty="${esc(variant)}"><div class="big" aria-hidden="true">${icon}</div>
     <h3>${esc(title)}</h3><p class="muted">${esc(text)}</p></div>`;
 }
 
@@ -100,7 +100,11 @@ function renderChrome() {
   nav.innerHTML = NAV.filter((item) => item.roles.includes(state.user.role))
     .map((item) => `<a href="${item.href}" data-route="${item.href}">${item.label}</a>`)
     .join('');
-  el('who').textContent = `${state.user.name} · ${state.user.role}`;
+  el('who').innerHTML = (function (u) {
+    const parts = String(u.name || '').trim().split(/\s+/);
+    const initials = ((parts[0] || '?')[0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+    return `<span class="avatar" aria-hidden="true">${esc(initials)}</span><span class="who-text"><strong>${esc(u.name)}</strong><span class="who-role">${esc(u.role)}</span></span>`;
+  })(state.user);
   el('signOutBtn').hidden = false;
   setUnread(state.user.unreadCount ?? 0);
   highlightNav();
@@ -455,7 +459,7 @@ async function renderRequests() {
             ? `<button class="btn btn-sm btn-outline" data-cancel="${r.id}">Cancel</button>` : ''}
             ${r.attachmentCount ? `<button class="btn btn-sm btn-outline" data-doc="${r.id}">Document</button>` : ''}</td>
         </tr>`).join('')}</tbody></table></div>`
-        : emptyBox('🗂️', 'Nothing here yet', 'Your leave requests will appear in this list.')}
+        : emptyBox('🗂️', 'Nothing here yet', 'Your leave requests will appear in this list.', 'requests')}
     </div>`;
   el('statusFilter').onchange = (e) => {
     state.requestStatus = e.target.value;
@@ -584,7 +588,7 @@ async function renderCalendar() {
       ${data.overlaps.length ? `<div class="overlap-list">${data.overlaps.map((o) => `
         <div class="overlap-item"><strong>${fmtDate(o.date)}:</strong>
           ${o.people.map((p) => `${esc(p.employeeName)} (${esc(p.leaveType)})`).join(', ')} are all away.</div>`).join('')}</div>`
-        : emptyBox('🙌', 'No overlaps this month', 'Nobody shares the same leave day in this month.')}
+        : emptyBox('🙌', 'No overlaps this month', 'Nobody shares the same leave day in this month.', 'calendar')}
     </section>`;
 
   el('prevMonth').onclick = () => { state.calMonth = shiftMonth(month, -1); renderCalendar().catch(failure); };
@@ -616,7 +620,7 @@ async function renderNotifications() {
           </div>
           ${n.isRead ? '' : `<button class="btn btn-sm btn-outline" data-read="${n.id}">Mark read</button>`}
         </div>`).join('')
-        : emptyBox('🔔', 'No notifications yet', 'You will be told here when something happens to your leave.')}
+        : emptyBox('🔔', 'No notifications yet', 'You will be told here when something happens to your leave.', 'notifications')}
     </section>`;
   setUnread(data.unreadCount);
   view().querySelectorAll('[data-read]').forEach((b) => {
