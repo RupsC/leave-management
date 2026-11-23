@@ -388,8 +388,10 @@ async function renderApply() {
     if (!start) return;
     try {
       const data = await api(`/overlaps?startDate=${start}&endDate=${end}`);
+      const names = [...new Set(data.conflicts.map((c) => esc(c.userName)))];
+      const who = names.length === 1 ? `${names[0]} is` : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} are`;
       el('overlapNote').innerHTML = data.hasOverlap
-        ? `<div class="notice">Heads-up: ${data.conflicts.map((c) => esc(c.userName)).join(', ')} already have leave on these dates.
+        ? `<div class="notice">Heads-up: ${who} already on leave on these dates.
              You can still apply — your manager decides.</div>`
         : '';
     } catch { /* ignore preview errors */ }
