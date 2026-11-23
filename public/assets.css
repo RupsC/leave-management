@@ -21,3 +21,95 @@
     repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0 2px, rgba(255, 255, 255, 0) 2px 22px),
     linear-gradient(160deg, #0d403d 0%, #14615b 48%, #c9704f 100%);
 }
+
+/* ==========================================================================
+   LeaveLedger - detail screens
+   The team calendar and the notification list are built with their own class
+   names; these rules give them the same paper-and-teal finish as the cards.
+   ========================================================================== */
+
+/* ------------------------------------------------------------- calendar */
+.cal-dow {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  font-weight: 700;
+  text-align: center;
+  padding-bottom: 4px;
+}
+.cal-date {
+  display: block;
+  font-weight: 650;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+.cal-cell.today .cal-date {
+  color: var(--accent-dark);
+  font-weight: 750;
+}
+.cal-cell.weekend { background: var(--brand-softer); }
+.cal-cell.other { background: transparent; }
+.cal-cell.overlap {
+  border-color: var(--warn);
+  box-shadow: inset 0 0 0 1px rgba(154, 91, 6, 0.16);
+  background: #fffdf8;
+}
+.cal-cell.overlap .cal-date { color: var(--warn); }
+
+/* Chips carry the leave-type colour inline; a white wash keeps the name dark
+   and legible whether that colour is pale mint or deep coral. */
+.cal-chip {
+  display: block;
+  margin-top: 3px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 650;
+  color: #10201e;
+  box-shadow: inset 0 0 0 40px rgba(255, 255, 255, 0.66), 0 0 0 1px rgba(16, 32, 30, 0.08);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  margin-top: 6px;
+}
+.legend > span { display: inline-flex; align-items: center; }
+
+.overlap-list { display: grid; gap: 8px; }
+.overlap-item {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  border: 1px solid rgba(154, 91, 6, 0.28);
+  font-size: 0.9rem;
+  color: #6d4204;
+}
+.overlap-item strong { color: #553300; }
+
+/* -------------------------------------------------------- notifications */
+.notif.unread {
+  background: var(--brand-softer);
+  border-radius: 12px;
+  box-shadow: inset 4px 0 0 var(--accent);
+  padding-left: 12px;
+  padding-right: 10px;
+}
+.notif h3 { margin-bottom: 2px; font-size: 1rem; }
+.notif p { margin-bottom: 4px; color: var(--ink-soft); font-size: 0.9rem; }
+.notif .muted { font-size: 0.8rem; }
+
+@media (max-width: 640px) {
+  .cal-dow { font-size: 0.62rem; letter-spacing: 0.04em; }
+  .cal-date { font-size: 0.72rem; }
+  .cal-chip { font-size: 0.6rem; padding: 0 4px; }
+  .legend { font-size: 0.75rem; gap: 4px 10px; }
+}
