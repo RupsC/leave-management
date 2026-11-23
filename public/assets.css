@@ -203,7 +203,7 @@
   white-space: nowrap;
 }
 .audit-gain { background: rgba(22, 120, 106, 0.16); }
-.audit-arrow { color: #b8503a; font-weight: 700; }
+.audit-arrow { color: #b14d38; font-weight: 700; }
 td.nowrap { white-space: nowrap; }
 
 /* ------------------------------------------------- approval queue */
@@ -225,3 +225,13 @@ td.nowrap { white-space: nowrap; }
   .approval-head { flex-direction: column; gap: 6px; }
   .audit-change { min-width: 0; }
 }
+
+/* ------------------------------------------------- approval queue */
+.approval-list { display: grid; gap: 4px; margin-top: 6px; }
+.approval-list .approval-row { padding: 18px 0; }
+.approval-list .approval-row:first-child { padding-top: 6px; }
+
+/* history-log chip legibility (WCAG AA on tinted backgrounds) */
+.audit-pair { color: #33514c; }
+.audit-pair.audit-gain { background: rgba(22, 120, 106, 0.1); color: #1d4b44; }
+.audit-arrow { color: #8f3a26; }
